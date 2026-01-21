@@ -9,6 +9,36 @@ over possible scorelines and derive outcome-related probabilities commonly used 
 
 ---
 
+🚀 Quickstart
+1) Clone & install dependencies
+```bash
+git clone <YOUR_REPO_URL>
+cd football-match-prediction-poisson
+python -m venv .venv
+
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+2) Data setup
+- Put FBRef-scraped CSV files into: data/raw/
+- Processed/feature dataset will be written to: data/processed/
+
+3) Build dataset (feature engineering)
+```bash
+python scripts/build_dataset.py
+```
+
+4) Predict a match (Poisson probabilities)
+
+```
+python scripts/predict_match.py --home "Arsenal" --away "Liverpool"
+```
+
+---
+
 ## 🎯 Problem Statement
 Given historical EPL data, we aim to:
 1. Estimate **expected goals** for each team in a match:  
