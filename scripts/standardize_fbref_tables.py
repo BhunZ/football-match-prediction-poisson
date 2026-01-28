@@ -1,4 +1,3 @@
-# scripts/standardize_fbref_tables.py
 import argparse
 from pathlib import Path
 import pandas as pd
