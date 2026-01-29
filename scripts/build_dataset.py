@@ -173,11 +173,20 @@ def build_dataset(raw_dir: Path, std_dir: Path, out_path: Path) -> pd.DataFrame:
     team_long = team_long.sort_values(["Season", "Team", "Date"]).reset_index(drop=True)
 
     # ---- Rolling / EWM / rest / lag ----
-    team_feat = (
-        team_long.groupby(["Season", "Team"], group_keys=False)
-        .apply(add_rolling_features)
-        .reset_index(drop=True)
-    )
+    gb = team_long.groupby(["Season", "Team"], group_keys=False)
+
+    # pandas mới có thể drop grouping columns trong apply -> cần ép giữ lại
+    try:
+        team_feat = gb.apply(add_rolling_features, include_groups=True)
+    except TypeError:
+        team_feat = gb.apply(add_rolling_features)
+    
+    # nếu Season/Team vẫn không nằm trong columns thì kéo từ index ra
+    if ("Season" not in team_feat.columns) or ("Team" not in team_feat.columns):
+        team_feat = team_feat.reset_index()
+    
+    team_feat = team_feat.reset_index(drop=True)
+
 
     feat_cols = [
         c for c in team_feat.columns
