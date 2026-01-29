@@ -1,3 +1,4 @@
+# scripts/build_dataset.py
 import argparse
 import re
 from pathlib import Path
@@ -24,30 +25,6 @@ def parse_score(score: str):
         return (int(parts[0].strip()), int(parts[1].strip()))
     except Exception:
         return (np.nan, np.nan)
-
-
-def load_team_table(path: Path) -> pd.DataFrame:
-    """Load FBRef team table and standardize common columns: Season, Squad."""
-    df = pd.read_csv(path)
-
-    # Standardize Season column name
-    if "season" in df.columns and "Season" not in df.columns:
-        df = df.rename(columns={"season": "Season"})
-
-    # Find/standardize Squad column name
-    squad_col = None
-    for c in df.columns:
-        if c == "Squad" or c.lower().endswith("squad"):
-            squad_col = c
-            break
-    if squad_col and squad_col != "Squad":
-        df = df.rename(columns={squad_col: "Squad"})
-
-    # Some tables use 'team' instead of 'Squad'
-    if "team" in df.columns and "Squad" not in df.columns:
-        df = df.rename(columns={"team": "Squad"})
-
-    return df
 
 
 def prev_season(s: str) -> str:
@@ -80,30 +57,50 @@ def add_rolling_features(df_team: pd.DataFrame, windows=ROLL_WINDOWS, alpha=EWM_
     return df_team
 
 
+def _ensure_season_col(df: pd.DataFrame) -> pd.DataFrame:
+    """Make sure Season exists (standardized tables usually use 'season')."""
+    if "season" in df.columns and "Season" not in df.columns:
+        df = df.rename(columns={"season": "Season"})
+    return df
+
+
+def _to_priors_key(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize team key to 'Squad' for joining priors."""
+    df = df.copy()
+    if "team" in df.columns and "Squad" not in df.columns:
+        df = df.rename(columns={"team": "Squad"})
+    return df
+
+
 # -----------------------------
 # Main pipeline
 # -----------------------------
-def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
-    # Required raw files
-    req_files = [
-        "pl_matches.csv",
-        "pl_team_stats.csv",
-        "pl_shooting.csv",
-        "pl_defense.csv",
-        "pl_passing.csv",
-        "pl_player_stats.csv",
-    ]
-    missing = [f for f in req_files if not (data_dir / f).exists()]
-    if missing:
-        raise FileNotFoundError(
-            "Missing required files in data_dir:\n"
-            + "\n".join([f"- {m}" for m in missing])
-            + f"\n\nExpected location: {data_dir.resolve()}"
-        )
+def build_dataset(raw_dir: Path, std_dir: Path, out_path: Path) -> pd.DataFrame:
+    # Required files
+    req_raw = ["pl_matches.csv"]
+    req_std = ["pl_team_stats.csv", "pl_shooting.csv", "pl_defense.csv", "pl_passing.csv"]
 
-    # ---- Load matches ----
-    matches = pd.read_csv(data_dir / "pl_matches.csv")
+    missing_raw = [f for f in req_raw if not (raw_dir / f).exists()]
+    missing_std = [f for f in req_std if not (std_dir / f).exists()]
+
+    if missing_raw or missing_std:
+        msg = []
+        if missing_raw:
+            msg.append("Missing required RAW files:")
+            msg += [f"- {m}" for m in missing_raw]
+            msg.append(f"Expected in: {raw_dir.resolve()}")
+        if missing_std:
+            msg.append("\nMissing required STANDARDIZED files:")
+            msg += [f"- {m}" for m in missing_std]
+            msg.append(f"Expected in: {std_dir.resolve()}")
+        raise FileNotFoundError("\n".join(msg))
+
+    # ---- Load matches from RAW ----
+    matches = pd.read_csv(raw_dir / "pl_matches.csv")
     matches["Date"] = pd.to_datetime(matches["Date"])
+
+    # Ensure Season exists
+    matches = _ensure_season_col(matches)
 
     # Score -> goals
     matches[["home_goals", "away_goals"]] = matches["Score"].apply(lambda x: pd.Series(parse_score(x)))
@@ -183,8 +180,7 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
     )
 
     feat_cols = [
-        c
-        for c in team_feat.columns
+        c for c in team_feat.columns
         if c.startswith(("roll", "ewm", "rest_days", "win_last", "draw_last", "loss_last"))
     ]
 
@@ -199,30 +195,20 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
     )
     dataset = dataset.merge(away_feat, on=["Season", "Date", "Away"], how="left")
 
-    # ---- Load priors (previous season strength) ----
-    team_stats = pd.read_csv(data_dir / "pl_team_stats.csv")
-    shooting   = pd.read_csv(data_dir / "pl_shooting.csv")
-    defense    = pd.read_csv(data_dir / "pl_defense.csv")
-    passing    = pd.read_csv(data_dir / "pl_passing.csv")
-    player_std = pd.read_csv(data_dir / "pl_player_stats.csv")
-    
-    # Ensure season naming
-    for d in [team_stats, shooting, defense, passing, player_std]:
-        if "season" in d.columns and "Season" not in d.columns:
-            d.rename(columns={"season": "Season"}, inplace=True)
-    
-    # Standardized keys: team + Season
-    def to_priors_key(df):
-        df = df.copy()
-        if "team" in df.columns and "Squad" not in df.columns:
-            df = df.rename(columns={"team": "Squad"})
-        return df
-    
-    team_stats = to_priors_key(team_stats)
-    shooting   = to_priors_key(shooting)
-    defense    = to_priors_key(defense)
-    passing    = to_priors_key(passing)
-    
+    # ---- Load priors from STANDARDIZED tables ----
+    team_stats = pd.read_csv(std_dir / "pl_team_stats.csv")
+    shooting   = pd.read_csv(std_dir / "pl_shooting.csv")
+    defense    = pd.read_csv(std_dir / "pl_defense.csv")
+    passing    = pd.read_csv(std_dir / "pl_passing.csv")
+
+    for d in [team_stats, shooting, defense, passing]:
+        d[:] = _ensure_season_col(d)
+
+    team_stats = _to_priors_key(team_stats)
+    shooting   = _to_priors_key(shooting)
+    defense    = _to_priors_key(defense)
+    passing    = _to_priors_key(passing)
+
     pri_team = team_stats[[
         "Season", "Squad",
         "goals_per90",
@@ -237,7 +223,7 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
         "xg_assist_per90": "prior_xag90",
         "possession_pct": "prior_poss",
     })
-    
+
     pri_shot = shooting[[
         "Season", "Squad",
         "shots_per90",
@@ -250,7 +236,7 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
         "npxg_per_shot": "prior_npxg_per_sh",
         "goals_minus_xg": "prior_finishing_delta",
     })
-    
+
     pri_def = defense[[
         "Season", "Squad",
         "tackles_plus_interceptions",
@@ -261,7 +247,7 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
         "blocks": "prior_blocks",
         "errors_leading_to_shot": "prior_def_errors",
     })
-    
+
     pri_pass = passing[[
         "Season", "Squad",
         "passes_completion_pct",
@@ -274,25 +260,15 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
         "passes_into_final_third": "prior_pass_final3rd",
         "passes_into_penalty_area": "prior_pass_box",
     })
-    
 
-    #player-based priors
-    if "Squad" not in player_std.columns:
-        raise ValueError("pl_player_stats.csv must contain 'Squad' column.")
-    needed_player_cols = ["Season", "Squad", "xG", "xGA", "xGD/90"]
-    miss = [c for c in needed_player_cols if c not in player_std.columns]
-    if miss:
-        raise ValueError(f"pl_player_stats.csv missing columns: {miss}")
-
-    pri_player = player_std[needed_player_cols].rename(
-        columns={"xG": "prior_team_xg", "xGA": "prior_team_xga", "xGD/90": "prior_xgd90"}
+    priors = (
+        pri_team
+        .merge(pri_shot, on=["Season", "Squad"], how="outer")
+        .merge(pri_def,  on=["Season", "Squad"], how="outer")
+        .merge(pri_pass, on=["Season", "Squad"], how="outer")
     )
 
-    priors = pri_team.merge(pri_shot, on=["Season", "Squad"], how="outer")
-    priors = priors.merge(pri_def, on=["Season", "Squad"], how="outer")
-    priors = priors.merge(pri_pass, on=["Season", "Squad"], how="outer")
-    priors = priors.merge(pri_player, on=["Season", "Squad"], how="outer")
-
+    # ---- Join priors using previous season ----
     dataset["prev_season"] = dataset["Season"].apply(prev_season)
 
     home_pr = priors.rename(columns={"Season": "prev_season", "Squad": "Home"})
@@ -306,7 +282,6 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
         how="left",
     )
 
-    # Drop helper join cols from away_pr
     dataset = dataset.drop(
         columns=[c for c in dataset.columns if c.endswith("_prev_season") or c.endswith("_Away")],
         errors="ignore",
@@ -327,14 +302,19 @@ def build_dataset(data_dir: Path, out_path: Path) -> pd.DataFrame:
     return dataset
 
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Build Premier League training dataset (rolling/ewm/priors/diff).")
+    parser = argparse.ArgumentParser(description="Build PL training dataset (rolling/ewm/priors/diff).")
     parser.add_argument(
-        "--data-dir",
+        "--raw-dir",
+        type=str,
+        default="data/raw",
+        help="Directory containing raw files (must include pl_matches.csv)."
+    )
+    parser.add_argument(
+        "--std-dir",
         type=str,
         default="data/processed/standardized",
-        help="Directory containing standardized CSV files."
+        help="Directory containing standardized FBRef tables (team/shooting/defense/passing)."
     )
     parser.add_argument(
         "--out",
@@ -344,10 +324,11 @@ def main():
     )
     args = parser.parse_args()
 
-    data_dir = Path(args.data_dir)
+    raw_dir = Path(args.raw_dir)
+    std_dir = Path(args.std_dir)
     out_path = Path(args.out)
 
-    df = build_dataset(data_dir, out_path)
+    df = build_dataset(raw_dir, std_dir, out_path)
     print(f"[OK] Saved dataset: {out_path} | shape={df.shape}")
 
 
