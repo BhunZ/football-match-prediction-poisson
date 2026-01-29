@@ -174,20 +174,15 @@ def build_dataset(raw_dir: Path, std_dir: Path, out_path: Path) -> pd.DataFrame:
 
     # ---- Rolling / EWM / rest / lag ----
     gb = team_long.groupby(["Season", "Team"], group_keys=False)
+    team_feat = gb.apply(add_rolling_features)
 
-    # pandas mới có thể drop grouping columns trong apply -> cần ép giữ lại
-    try:
-        team_feat = gb.apply(add_rolling_features, include_groups=True)
-    except TypeError:
-        team_feat = gb.apply(add_rolling_features)
-    
-    # nếu Season/Team vẫn không nằm trong columns thì kéo từ index ra
-    if ("Season" not in team_feat.columns) or ("Team" not in team_feat.columns):
-        team_feat = team_feat.reset_index()
+    if "Season" not in team_feat.columns:
+        team_feat["Season"] = team_long.loc[team_feat.index, "Season"].values
+    if "Team" not in team_feat.columns:
+        team_feat["Team"] = team_long.loc[team_feat.index, "Team"].values
     
     team_feat = team_feat.reset_index(drop=True)
-
-
+    
     feat_cols = [
         c for c in team_feat.columns
         if c.startswith(("roll", "ewm", "rest_days", "win_last", "draw_last", "loss_last"))
@@ -210,8 +205,10 @@ def build_dataset(raw_dir: Path, std_dir: Path, out_path: Path) -> pd.DataFrame:
     defense    = pd.read_csv(std_dir / "pl_defense.csv")
     passing    = pd.read_csv(std_dir / "pl_passing.csv")
 
-    for d in [team_stats, shooting, defense, passing]:
-        d[:] = _ensure_season_col(d)
+    team_stats = _ensure_season_col(team_stats)
+    shooting   = _ensure_season_col(shooting)
+    defense    = _ensure_season_col(defense)
+    passing    = _ensure_season_col(passing)
 
     team_stats = _to_priors_key(team_stats)
     shooting   = _to_priors_key(shooting)
