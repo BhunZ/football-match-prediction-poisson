@@ -25,3 +25,5 @@ python scripts/train_poisson.py \
   --feat-path data/processed/pl_training_dataset.csv \
   --match-path data/raw/pl_matches.csv \
   --model-dir models/poisson
+```
+
