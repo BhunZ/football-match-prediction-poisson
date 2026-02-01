@@ -41,7 +41,7 @@ python scripts/predict.py
 
 ---
 
-## 🎯 Problem Statement
+## Problem Statement
 Given historical EPL data, we aim to:
 1. Estimate **expected goals** for each team in a match:  
    - λ_home (expected home goals)  
@@ -58,10 +58,10 @@ This is a **probability estimation** task (decision-support), not a deterministi
 - **League:** English Premier League  
 - **Seasons:** 2023–2024, 2024–2025, 2025–2026 (ongoing)
 
-### 📥 Source
+### Source
 Data is **web-scraped from FBRef**
 
-### 📊 What the dataset contains
+### What the dataset contains
 Beyond final scores, the dataset includes team-level performance stats such as:
 - Goals & Expected Goals (**GF/GA, xG/xGA**)
 - Possession
@@ -71,7 +71,7 @@ Beyond final scores, the dataset includes team-level performance stats such as:
 
 ---
 
-## 🧠 Methodology
+## Methodology
 - Goal scoring is modeled using the **Poisson distribution**
 - Two separate expected goal parameters (λ) are estimated:
   - **Home team goals**
@@ -82,7 +82,7 @@ From these distributions, joint scoreline probabilities are computed and aggrega
 - Over / Under goal probabilities
 ---
 
-## 📤 Outputs
+## Outputs
 For a given match, the system returns:
 - λ_home, λ_away (expected goals)
 - scoreline probability matrix (up to a chosen max-goals cutoff)
@@ -92,7 +92,7 @@ For a given match, the system returns:
 
 ---
 
-## ⚠️ Limitations
+## Limitations
 - Assumes **independence** between home and away goal-scoring processes
 - Does not account for:
   - Tactical adjustments
@@ -102,6 +102,6 @@ For a given match, the system returns:
 
 ---
 
-## ✅ Conclusion
+## Conclusion
 Poisson models are a strong and interpretable **statistical baseline** for football prediction.
 This project focuses on producing **calibrated probability estimates** rather than “correct winner” guesses.
