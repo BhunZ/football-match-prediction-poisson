@@ -12,7 +12,7 @@ over possible scorelines and derive outcome-related probabilities commonly used 
 🚀 Quickstart
 1) Clone & install dependencies
 ```bash
-git clone <YOUR_REPO_URL>
+git clone https://github.com/BhunZ/football-match-prediction-poisson.git
 cd football-match-prediction-poisson
 python -m venv .venv
 
@@ -22,19 +22,21 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2) Data setup
-- Put FBRef-scraped CSV files into: data/raw/
-- Processed/feature dataset will be written to: data/processed/
-
-3) Build dataset (feature engineering)
+2) Build dataset
 ```bash
-python scripts/build_dataset.py
+python scripts/build_dataset.py --raw-dir data/raw --std-dir data/processed/standardized --out data/processed/pl_training_dataset.csv
+```
+
+
+3) Train Poisson model
+```bash
+python scripts/train_poisson.py --feat-path data/processed/pl_training_dataset.csv --match-path data/raw/pl_matches.csv --model-dir models/poisson
 ```
 
 4) Predict a match (Poisson probabilities)
 
 ```
-python scripts/predict_match.py --home "Arsenal" --away "Liverpool"
+python scripts/predict.py
 ```
 
 ---
