@@ -22,18 +22,23 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2) Build dataset
+2) Standardlize raw data
+```bash
+python scripts/standardize_fbref_tables.py --in-dir data/raw --out-dir data/processed/standardized
+```
+
+3) Build dataset
 ```bash
 python scripts/build_dataset.py --raw-dir data/raw --std-dir data/processed/standardized --out data/processed/pl_training_dataset.csv
 ```
 
 
-3) Train Poisson model
+4) Train Poisson model
 ```bash
 python scripts/train_poisson.py --feat-path data/processed/pl_training_dataset.csv --match-path data/raw/pl_matches.csv --model-dir models/poisson
 ```
 
-4) Predict a match (Poisson probabilities)
+5) Predict a match (Poisson probabilities)
 
 ```
 python scripts/predict.py
